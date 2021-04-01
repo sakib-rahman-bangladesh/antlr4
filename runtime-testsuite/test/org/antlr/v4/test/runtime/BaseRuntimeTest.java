@@ -11,9 +11,7 @@ import org.antlr.v4.runtime.misc.Pair;
 import org.antlr.v4.runtime.misc.Utils;
 import org.antlr.v4.tool.ANTLRMessage;
 import org.antlr.v4.tool.DefaultToolListener;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.*;
 import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
@@ -31,6 +29,8 @@ import java.util.Collections;
 import java.util.List;
 
 import static junit.framework.TestCase.assertEquals;
+import static junit.framework.TestCase.fail;
+import static junit.framework.TestCase.failNotEquals;
 import static org.junit.Assume.assumeFalse;
 
 /** This class represents a single runtime test. It pulls data from
@@ -42,32 +42,58 @@ import static org.junit.Assume.assumeFalse;
  *  @since 4.6.
  */
 public abstract class BaseRuntimeTest {
+
 	public final static String[] Targets = {
 		"Cpp",
-		"Java",
-		"Go",
 		"CSharp",
+		"Dart",
+		"Go",
+		"Java",
+		"Node",
+		"PHP",
 		"Python2", "Python3",
-		"Node", "Safari", "Firefox", "Explorer", "Chrome"
-	};
-	public final static String[] JavaScriptTargets = {
-		"Node", "Safari", "Firefox", "Explorer", "Chrome"
+		"Swift"
 	};
 
-	static {
-		// Add heartbeat thread to gen minimal output for travis, appveyor to
-		// avoid timeout.
+	@BeforeClass
+	public static void startHeartbeatToAvoidTimeout() {
+		if (isTravisCI() || isAppVeyorCI())
+			startHeartbeat();
+	}
+
+	@AfterClass
+	public static void stopHeartbeat() {
+		heartbeat = false;
+	}
+
+	private static boolean isAppVeyorCI() {
+		// see https://www.appveyor.com/docs/environment-variables/
+		String s = System.getenv("APPVEYOR");
+		return s!=null && "true".equals(s.toLowerCase());
+	}
+
+	private static boolean isTravisCI() {
+		// see https://docs.travis-ci.com/user/environment-variables/#default-environment-variables
+		String s = System.getenv("TRAVIS");
+		return s!=null && "true".equals(s.toLowerCase());
+	}
+
+	static boolean heartbeat = false;
+
+	private static void startHeartbeat() {
+		// Add heartbeat thread to gen minimal output for travis, appveyor to avoid timeout.
 		Thread t = new Thread("heartbeat") {
 			@Override
 			public void run() {
-				while (true) {
-					System.out.print('.');
+				heartbeat = true;
+				while (heartbeat) {
 					try {
-						Thread.sleep(5000);
-					}
-					catch (Exception e) {
+						//noinspection BusyWait
+						Thread.sleep(10000);
+					} catch (Exception e) {
 						e.printStackTrace();
 					}
+					System.out.print('.');
 				}
 			}
 		};
@@ -85,17 +111,19 @@ public abstract class BaseRuntimeTest {
 		this.delegate = delegate;
 	}
 
-	public static void mkdir(String dir) {
-		File f = new File(dir);
-		f.mkdirs();
-	}
-
 	@Before
 	public void setUp() throws Exception {
 		// From http://junit.sourceforge.net/javadoc/org/junit/Assume.html
 		// "The default JUnit runner treats tests with failing assumptions as ignored"
-		assumeFalse(descriptor.ignore(descriptor.getTarget()));
+		assumeFalse(checkIgnored());
 		delegate.testSetUp();
+	}
+
+	public boolean checkIgnored() {
+		boolean ignored = !TestContext.isSupportedTarget(descriptor.getTarget()) || descriptor.ignore(descriptor.getTarget());
+		if(ignored)
+			System.out.println("Ignore " + descriptor);
+		return ignored;
 	}
 
 	@Rule
@@ -109,21 +137,24 @@ public abstract class BaseRuntimeTest {
 
 	@Test
 	public void testOne() throws Exception {
+		// System.out.println(descriptor.getTestName());
 		// System.out.println(delegate.getTmpDir());
-		if ( descriptor.ignore(descriptor.getTarget()) ) {
-			System.out.printf("Ignore "+descriptor);
+		if (descriptor.ignore(descriptor.getTarget()) ) {
+			System.out.println("Ignore " + descriptor);
 			return;
 		}
-		if ( descriptor.getTestType().contains("Parser") ) {
+		delegate.beforeTest(descriptor);
+		if (descriptor.getTestType().contains("Parser") ) {
 			testParser(descriptor);
 		}
 		else {
 			testLexer(descriptor);
 		}
+		delegate.afterTest(descriptor);
 	}
 
 	public void testParser(RuntimeTestDescriptor descriptor) throws Exception {
-		mkdir(delegate.getTmpDir());
+		RuntimeTestUtils.mkdir(delegate.getTempParserDirPath());
 
 		Pair<String, String> pair = descriptor.getGrammar();
 
@@ -140,7 +171,7 @@ public abstract class BaseRuntimeTest {
 				g.registerRenderer(String.class, new StringRenderer());
 				g.importTemplates(targetTemplates);
 				ST grammarST = new ST(g, spair.b);
-				writeFile(delegate.getTmpDir(), spair.a+".g4", grammarST.render());
+				writeFile(delegate.getTempParserDirPath(), spair.a+".g4", grammarST.render());
 			}
 		}
 
@@ -161,18 +192,11 @@ public abstract class BaseRuntimeTest {
 		                                   descriptor.getInput(),
 		                                   descriptor.showDiagnosticErrors()
 		                                  );
-		if ( delegate instanceof SpecialRuntimeTestAssert ) {
-			((SpecialRuntimeTestAssert)delegate).assertEqualStrings(descriptor.getErrors(), delegate.getParseErrors());
-			((SpecialRuntimeTestAssert)delegate).assertEqualStrings(descriptor.getOutput(), found);
-		}
-		else {
-			assertEquals(descriptor.getErrors(), delegate.getParseErrors());
-			assertEquals(descriptor.getOutput(), found);
-		}
+		assertCorrectOutput(descriptor, delegate, found);
 	}
 
 	public void testLexer(RuntimeTestDescriptor descriptor) throws Exception {
-		mkdir(delegate.getTmpDir());
+		RuntimeTestUtils.mkdir(delegate.getTempParserDirPath());
 
 		Pair<String, String> pair = descriptor.getGrammar();
 
@@ -189,7 +213,7 @@ public abstract class BaseRuntimeTest {
 				g.registerRenderer(String.class, new StringRenderer());
 				g.importTemplates(targetTemplates);
 				ST grammarST = new ST(g, spair.b);
-				writeFile(delegate.getTmpDir(), spair.a+".g4", grammarST.render());
+				writeFile(delegate.getTempParserDirPath(), spair.a+".g4", grammarST.render());
 			}
 		}
 
@@ -202,16 +226,7 @@ public abstract class BaseRuntimeTest {
 		grammar = grammarST.render();
 
 		String found = delegate.execLexer(grammarName+".g4", grammar, grammarName, descriptor.getInput(), descriptor.showDFA());
-		if ( delegate instanceof SpecialRuntimeTestAssert ) {
-			((SpecialRuntimeTestAssert)delegate).assertEqualStrings(descriptor.getOutput(), found);
-			((SpecialRuntimeTestAssert)delegate).assertEqualStrings(descriptor.getANTLRToolErrors(), delegate.getANTLRToolErrors());
-			((SpecialRuntimeTestAssert)delegate).assertEqualStrings(descriptor.getErrors(), delegate.getParseErrors());
-		}
-		else {
-			assertEquals(descriptor.getOutput(), found);
-			assertEquals(descriptor.getANTLRToolErrors(), delegate.getANTLRToolErrors());
-			assertEquals(descriptor.getErrors(), delegate.getParseErrors());
-		}
+		assertCorrectOutput(descriptor, delegate, found);
 	}
 
 	/** Write a grammar to tmpdir and run antlr */
@@ -222,7 +237,7 @@ public abstract class BaseRuntimeTest {
 	                                       boolean defaultListener,
 	                                       String... extraOptions)
 	{
-		mkdir(workdir);
+		RuntimeTestUtils.mkdir(workdir);
 		writeFile(workdir, grammarFileName, grammarStr);
 		return antlrOnString(workdir, targetName, grammarFileName, defaultListener, extraOptions);
 	}
@@ -287,6 +302,8 @@ public abstract class BaseRuntimeTest {
 	// ---- support ----
 
 	public static RuntimeTestDescriptor[] getRuntimeTestDescriptors(Class<?> clazz, String targetName) {
+		if(!TestContext.isSupportedTarget(targetName))
+			return new RuntimeTestDescriptor[0];
 		Class<?>[] nestedClasses = clazz.getClasses();
 		List<RuntimeTestDescriptor> descriptors = new ArrayList<RuntimeTestDescriptor>();
 		for (Class<?> nestedClass : nestedClasses) {
@@ -294,8 +311,10 @@ public abstract class BaseRuntimeTest {
 			if ( RuntimeTestDescriptor.class.isAssignableFrom(nestedClass) && !Modifier.isAbstract(modifiers) ) {
 				try {
 					RuntimeTestDescriptor d = (RuntimeTestDescriptor) nestedClass.newInstance();
-					d.setTarget(targetName);
-					descriptors.add(d);
+					if(!d.ignore(targetName)) {
+						d.setTarget(targetName);
+						descriptors.add(d);
+					}
 				} catch (Exception e) {
 					e.printStackTrace(System.err);
 				}
@@ -311,6 +330,78 @@ public abstract class BaseRuntimeTest {
 		catch (IOException ioe) {
 			System.err.println("can't write file");
 			ioe.printStackTrace(System.err);
+		}
+	}
+
+	public static String readFile(String dir, String fileName) {
+		try {
+			return String.copyValueOf(Utils.readFile(dir+"/"+fileName, "UTF-8"));
+		}
+		catch (IOException ioe) {
+			System.err.println("can't read file");
+			ioe.printStackTrace(System.err);
+		}
+		return null;
+	}
+
+	protected static void assertCorrectOutput(RuntimeTestDescriptor descriptor, RuntimeTestSupport delegate, String actualOutput) {
+		String actualParseErrors = delegate.getParseErrors();
+		String actualToolErrors = delegate.getANTLRToolErrors();
+		String expectedOutput = descriptor.getOutput();
+		String expectedParseErrors = descriptor.getErrors();
+		String expectedToolErrors = descriptor.getANTLRToolErrors();
+
+		if (actualOutput == null) {
+			actualOutput = "";
+		}
+		if (actualParseErrors == null) {
+			actualParseErrors = "";
+		}
+		if (actualToolErrors == null) {
+			actualToolErrors = "";
+		}
+		if (expectedOutput == null) {
+			expectedOutput = "";
+		}
+		if (expectedParseErrors == null) {
+			expectedParseErrors = "";
+		}
+		if (expectedToolErrors == null) {
+			expectedToolErrors = "";
+		}
+
+		if (actualOutput.equals(expectedOutput) &&
+				actualParseErrors.equals(expectedParseErrors) &&
+				actualToolErrors.equals(expectedToolErrors)) {
+			return;
+		}
+
+		if (actualOutput.equals(expectedOutput)) {
+			if (actualParseErrors.equals(expectedParseErrors)) {
+				failNotEquals("[" + descriptor.getTarget() + ":" + descriptor.getTestName() + "] " +
+								"Parse output and parse errors are as expected, but tool errors are incorrect",
+						expectedToolErrors, actualToolErrors);
+			}
+			else {
+				fail("[" + descriptor.getTarget() + ":" + descriptor.getTestName() + "] " +
+						"Parse output is as expected, but errors are not: " +
+						"expectedParseErrors:<" + expectedParseErrors +
+						">; actualParseErrors:<" + actualParseErrors +
+						">; expectedToolErrors:<" + expectedToolErrors +
+						">; actualToolErrors:<" + actualToolErrors +
+						">.");
+			}
+		}
+		else {
+			fail("[" + descriptor.getTarget() + ":" + descriptor.getTestName() + "] " +
+					"Parse output is incorrect: " +
+					"expectedOutput:<" + expectedOutput +
+					">; actualOutput:<" + actualOutput +
+					">; expectedParseErrors:<" + expectedParseErrors +
+					">; actualParseErrors:<" + actualParseErrors +
+					">; expectedToolErrors:<" + expectedToolErrors +
+					">; actualToolErrors:<" + actualToolErrors +
+					">.");
 		}
 	}
 }

@@ -341,7 +341,7 @@ public enum ErrorType {
 	 * <li>implicitly generated grammar <em>grammar</em> has no rules</li>
 	 * </ul>
 	 */
-	NO_RULES(99, "<if(arg2.implicitLexerOwner)>implicitly generated <endif>grammar <arg> has no rules", ErrorSeverity.ERROR),
+	NO_RULES(99, "<if(arg2.implicitLexerOwner)>implicitly generated <endif>grammar <arg> has no non-fragment rules", ErrorSeverity.ERROR),
 	/**
 	 * Compiler Error 105.
 	 *
@@ -1073,6 +1073,21 @@ public enum ErrorType {
 			182,
 			"unicode property escapes not allowed in lexer charset range: <arg>",
 			ErrorSeverity.ERROR),
+
+	/**
+	 * Compiler Warning 184.
+	 *
+	 * <p>The token value overlapped by another token or self</p>
+	 *
+	 * <pre>
+	 * TOKEN1: 'value';
+	 * TOKEN2: 'value'; // warning
+	 * </pre>
+	 */
+	TOKEN_UNREACHABLE(
+			184,
+			"One of the token <arg> values unreachable. <arg2> is always overlapped by token <arg3>",
+			ErrorSeverity.WARNING),
 
 	/*
 	 * Backward incompatibility errors
