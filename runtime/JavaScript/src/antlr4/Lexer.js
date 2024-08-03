@@ -1,22 +1,20 @@
-/* Copyright (c) 2012-2017 The ANTLR Project. All rights reserved.
+/* Copyright (c) 2012-2022 The ANTLR Project. All rights reserved.
  * Use of this file is governed by the BSD 3-clause license that
  * can be found in the LICENSE.txt file in the project root.
  */
 
-const {Token} = require('./Token');
-const Recognizer = require('./Recognizer');
-const CommonTokenFactory = require('./CommonTokenFactory');
-const {RecognitionException} = require('./error/Errors');
-const {LexerNoViableAltException} = require('./error/Errors');
-
-class TokenSource {}
+import Token from './Token.js';
+import Recognizer from './Recognizer.js';
+import CommonTokenFactory from './CommonTokenFactory.js';
+import RecognitionException from './error/RecognitionException.js';
+import LexerNoViableAltException from './error/LexerNoViableAltException.js';
 
 /**
  * A lexer is recognizer that draws input symbols from a character stream.
  * lexer grammars result in a subclass of this object. A Lexer object
  * uses simplified match() and error recovery mechanisms in the interest of speed.
  */
-class Lexer extends Recognizer {
+export default class Lexer extends Recognizer {
 	constructor(input) {
 		super();
 		this._input = input;
@@ -101,7 +99,7 @@ class Lexer extends Recognizer {
 		 */
 		const tokenStartMarker = this._input.mark();
 		try {
-			while (true) {
+			for (;;) {
 				if (this._hitEOF) {
 					this.emitEOF();
 					return this._token;
@@ -113,7 +111,7 @@ class Lexer extends Recognizer {
 				this._tokenStartLine = this._interp.line;
 				this._text = null;
 				let continueOuter = false;
-				while (true) {
+				for (;;) {
 					this._type = Token.INVALID_TYPE;
 					let ttype = Lexer.SKIP;
 					try {
@@ -123,7 +121,7 @@ class Lexer extends Recognizer {
 							this.notifyListeners(e); // report error
 							this.recover(e);
 						} else {
-							console.log(e.stack);
+                            console.log(e.stack);
 							throw e;
 						}
 					}
@@ -171,8 +169,24 @@ class Lexer extends Recognizer {
 		this._type = Lexer.MORE;
 	}
 
+    /**
+     * @deprecated since ANTLR 4.13.2; use setMode instead
+     */
 	mode(m) {
+		console.warn("Calling deprecated method in Lexer class: mode(...)");
+		this.setMode(m);
+	}
+
+	setMode(m) {
 		this._mode = m;
+	}
+
+	getMode() {
+		return this._mode;
+	}
+
+	getModeStack() {
+		return this._modeStack;
 	}
 
 	pushMode(m) {
@@ -180,7 +194,7 @@ class Lexer extends Recognizer {
 			console.log("pushMode " + m);
 		}
 		this._modeStack.push(this._mode);
-		this.mode(m);
+		this.setMode(m);
 	}
 
 	popMode() {
@@ -190,7 +204,7 @@ class Lexer extends Recognizer {
 		if (this._interp.debug) {
 			console.log("popMode back to " + this._modeStack.slice(0, -1));
 		}
-		this.mode(this._modeStack.pop());
+		this.setMode(this._modeStack.pop());
 		return this._mode;
 	}
 
@@ -254,7 +268,7 @@ class Lexer extends Recognizer {
 		const stop = this._input.index;
 		const text = this._input.getText(start, stop);
 		const msg = "token recognition error at: '" + this.getErrorDisplay(text) + "'";
-		const listener = this.getErrorListenerDispatch();
+		const listener = this.getErrorListener();
 		listener.syntaxError(this, null, this._tokenStartLine,
 				this._tokenStartColumn, msg, e);
 	}
@@ -320,7 +334,7 @@ class Lexer extends Recognizer {
 	}
 
 	get type(){
-		return this.type;
+		return this._type;
 	}
 
 	set type(type) {
@@ -368,7 +382,3 @@ Lexer.HIDDEN = Token.HIDDEN_CHANNEL;
 Lexer.MIN_CHAR_VALUE = 0x0000;
 Lexer.MAX_CHAR_VALUE = 0x10FFFF;
 
-// Set the char stream and reset the lexer
-
-
-module.exports = Lexer;

@@ -9,7 +9,7 @@ import 'dart:math';
 
 import 'package:collection/collection.dart';
 
-import '../../misc/pair.dart';
+import '../../misc/misc.dart';
 import '../../prediction_context.dart';
 import '../../util/bit_set.dart';
 import '../../util/utils.dart';
@@ -109,7 +109,7 @@ class ATNConfigSet extends Iterable<ATNConfig> {
         mergeCache,
   ]) {
     if (readOnly) throw StateError('This set is readonly');
-    if (config.semanticContext != SemanticContext.NONE) {
+    if (config.semanticContext != EmptySemanticContext.Instance) {
       hasSemanticContext = true;
     }
     if (config.outerContextDepth > 0) {
@@ -176,7 +176,7 @@ class ATNConfigSet extends Iterable<ATNConfig> {
   List<SemanticContext?> get predicates {
     final preds = <SemanticContext?>[];
     for (var c in configs) {
-      if (c.semanticContext != SemanticContext.NONE) {
+      if (c.semanticContext != EmptySemanticContext.Instance) {
         preds.add(c.semanticContext);
       }
     }

@@ -241,7 +241,7 @@ namespace Antlr4.Runtime.Atn
 	public class ParserATNSimulator : ATNSimulator
 	{
 		public static readonly bool debug = false;
-		public static readonly bool debug_list_atn_decisions = false;
+		public static bool trace_atn_sim = false;
 		public static readonly bool dfa_debug = false;
 		public static readonly bool retry_debug = false;
 
@@ -304,7 +304,7 @@ namespace Antlr4.Runtime.Atn
 		public virtual int AdaptivePredict(ITokenStream input, int decision,
 								   ParserRuleContext outerContext)
 		{
-			if (debug || debug_list_atn_decisions)
+			if (debug || trace_atn_sim)
 			{
 				Console.WriteLine("adaptivePredict decision " + decision +
 									   " exec LA(1)==" + GetLookaheadName(input) +
@@ -339,7 +339,7 @@ namespace Antlr4.Runtime.Atn
 				if (s0 == null)
 				{
 					if (outerContext == null) outerContext = ParserRuleContext.EmptyContext;
-					if (debug || debug_list_atn_decisions)
+					if (debug)
 					{
 						Console.WriteLine("predictATN decision " + dfa.decision +
 										   " exec LA(1)==" + GetLookaheadName(input) +
@@ -419,11 +419,12 @@ namespace Antlr4.Runtime.Atn
 						   ITokenStream input, int startIndex,
 						   ParserRuleContext outerContext)
 		{
-			if (debug || debug_list_atn_decisions)
+			if (debug || trace_atn_sim)
 			{
 				Console.WriteLine("execATN decision " + dfa.decision +
-								   " exec LA(1)==" + GetLookaheadName(input) +
-								   " line " + input.LT(1).Line + ":" + input.LT(1).Column);
+				                  ", DFA state " + s0 +
+								  ", LA(1)==" + GetLookaheadName(input) +
+								  " line " + input.LT(1).Line + ":" + input.LT(1).Column);
 			}
 
 			DFAState previousD = s0;
@@ -654,7 +655,7 @@ namespace Antlr4.Runtime.Atn
 											 ITokenStream input, int startIndex,
 											 ParserRuleContext outerContext)
 		{
-			if (debug || debug_list_atn_decisions)
+			if (debug || trace_atn_sim)
 			{
 				Console.WriteLine("execATNWithFullContext " + s0);
 			}
@@ -921,7 +922,11 @@ namespace Antlr4.Runtime.Atn
 				}
 			}
 
-			if (reach.Empty)
+            if ( trace_atn_sim ) {
+                Console.WriteLine("computeReachSet "+closure+" -> "+reach);
+            }
+
+    		if (reach.Empty)
 				return null;
 			return reach;
 		}
@@ -984,6 +989,11 @@ namespace Antlr4.Runtime.Atn
 			// always at least the implicit call to start rule
 			PredictionContext initialContext = PredictionContext.FromRuleContext(atn, ctx);
 			ATNConfigSet configs = new ATNConfigSet(fullCtx);
+
+            if ( trace_atn_sim )  {
+                Console.WriteLine("computeStartState from ATN state "+p+" initialContext="+initialContext);
+            }
+
 
 			for (int i = 0; i < p.NumberOfTransitions; i++)
 			{
@@ -1238,11 +1248,11 @@ namespace Antlr4.Runtime.Atn
 			/* altToPred starts as an array of all null contexts. The entry at index i
 			 * corresponds to alternative i. altToPred[i] may have one of three values:
 			 *   1. null: no ATNConfig c is found such that c.alt==i
-			 *   2. SemanticContext.NONE: At least one ATNConfig c exists such that
-			 *      c.alt==i and c.semanticContext==SemanticContext.NONE. In other words,
+			 *   2. SemanticContext.Empty.Instance: At least one ATNConfig c exists such that
+			 *      c.alt==i and c.semanticContext==SemanticContext.Empty.Instance. In other words,
 			 *      alt i has at least one unpredicated config.
 			 *   3. Non-NONE Semantic Context: There exists at least one, and for all
-			 *      ATNConfig c such that c.alt==i, c.semanticContext!=SemanticContext.NONE.
+			 *      ATNConfig c such that c.alt==i, c.semanticContext!=SemanticContext.Empty.Instance.
 			 *
 			 * From this, it is clear that NONE||anything==NONE.
 			 */
@@ -1260,9 +1270,9 @@ namespace Antlr4.Runtime.Atn
 			{
 				if (altToPred[i] == null)
 				{
-					altToPred[i] = SemanticContext.NONE;
+					altToPred[i] = SemanticContext.Empty.Instance;
 				}
-				else if (altToPred[i] != SemanticContext.NONE)
+				else if (altToPred[i] != SemanticContext.Empty.Instance)
 				{
 					nPredAlts++;
 				}
@@ -1288,13 +1298,13 @@ namespace Antlr4.Runtime.Atn
 			{
 				SemanticContext pred = altToPred[i];
 
-				// unpredicated is indicated by SemanticContext.NONE
+				// unpredicated is indicated by SemanticContext.Empty.Instance
 
 				if (ambigAlts != null && ambigAlts[i])
 				{
 					pairs.Add(new PredPrediction(pred, i));
 				}
-				if (pred != SemanticContext.NONE) containsPredicate = true;
+				if (pred != SemanticContext.Empty.Instance) containsPredicate = true;
 			}
 
 			if (!containsPredicate)
@@ -1407,7 +1417,7 @@ namespace Antlr4.Runtime.Atn
 			ATNConfigSet failed = new ATNConfigSet(configSet.fullCtx);
 			foreach (ATNConfig c in configSet.configs)
 			{
-				if (c.semanticContext != SemanticContext.NONE)
+				if (c.semanticContext != SemanticContext.Empty.Instance)
 				{
 					bool predicateEvaluationResult = EvalSemanticContext(c.semanticContext, outerContext, c.alt, configSet.fullCtx);
 					if (predicateEvaluationResult)
@@ -1438,7 +1448,7 @@ namespace Antlr4.Runtime.Atn
 			BitSet predictions = new BitSet();
 			foreach (PredPrediction pair in predPredictions)
 			{
-				if (pair.pred == SemanticContext.NONE)
+				if (pair.pred == SemanticContext.Empty.Instance)
 				{
 					predictions[pair.alt] = true;
 					if (!complete)
@@ -1532,7 +1542,7 @@ namespace Antlr4.Runtime.Atn
 												int depth,
 												bool treatEofAsEpsilon)
 		{
-			if (debug)
+			if (trace_atn_sim)
 				Console.WriteLine("closure(" + config.ToString(parser, true) + ")");
 
 			if (config.state is RuleStopState)
@@ -1547,7 +1557,7 @@ namespace Antlr4.Runtime.Atn
 						{
 							if (fullCtx)
 							{
-								configSet.Add(new ATNConfig(config, config.state, PredictionContext.EMPTY), mergeCache);
+								configSet.Add(new ATNConfig(config, config.state, EmptyPredictionContext.Instance), mergeCache);
 								continue;
 							}
 							else {
@@ -2249,7 +2259,10 @@ namespace Antlr4.Runtime.Atn
 			lock (dfa.states)
 			{
 				DFAState existing = dfa.states.Get(D);
-				if (existing != null) return existing;
+				if (existing != null) {
+    				if ( trace_atn_sim ) Console.WriteLine("addDFAState " + D + " exists");
+    				return existing;
+				}
 
 				D.stateNumber = dfa.states.Count;
 				if (!D.configSet.IsReadOnly)
@@ -2258,7 +2271,8 @@ namespace Antlr4.Runtime.Atn
 					D.configSet.IsReadOnly = true;
 				}
 				dfa.states.Put(D, D);
-				if (debug) Console.WriteLine("adding new DFA state: " + D);
+
+  				if ( trace_atn_sim ) Console.WriteLine("addDFAState new " + D);
 				return D;
 			}
 		}
@@ -2272,7 +2286,7 @@ namespace Antlr4.Runtime.Atn
 								   ", input=" + parser.TokenStream.GetText(interval));
 			}
 			if (parser != null)
-				parser.ErrorListenerDispatch.ReportAttemptingFullContext(parser, dfa, startIndex, stopIndex, conflictingAlts, null /*configs*/);
+				parser.ErrorListenerDispatch.ReportAttemptingFullContext(parser, dfa, startIndex, stopIndex, conflictingAlts, configs);
 		}
 
 		protected virtual void ReportContextSensitivity(DFA dfa, int prediction, ATNConfigSet configs, int startIndex, int stopIndex)
@@ -2283,7 +2297,7 @@ namespace Antlr4.Runtime.Atn
 				Console.WriteLine("ReportContextSensitivity decision=" + dfa.decision + ":" + configs +
 								   ", input=" + parser.TokenStream.GetText(interval));
 			}
-			if (parser != null) parser.ErrorListenerDispatch.ReportContextSensitivity(parser, dfa, startIndex, stopIndex, prediction, null /*configs*/);
+			if (parser != null) parser.ErrorListenerDispatch.ReportContextSensitivity(parser, dfa, startIndex, stopIndex, prediction, configs);
 		}
 
 		/** If context sensitive parsing, we know it's ambiguity not conflict */

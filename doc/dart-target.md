@@ -1,6 +1,6 @@
 # ANTLR4 Runtime for Dart
 
-From version 4.9.3 onwards antlr's dart generated code is null sound safety compatible and sets the minimum dart sdk version to 2.12.0.
+From version 4.9 onwards antlr's dart generated code is null sound safety compatible and sets the minimum dart sdk version to 2.12.0.
 
 ### First steps
 
@@ -89,7 +89,6 @@ void main(List<String> args) async {
   final tokens = CommonTokenStream(lexer);
   final parser = JSONParser(tokens);
   parser.addErrorListener(DiagnosticErrorListener());
-  parser.buildParseTree = true;
   final tree = parser.json();
   ParseTreeWalker.DEFAULT.walk(TreeShapeListener(), tree);
 }

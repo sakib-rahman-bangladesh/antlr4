@@ -24,7 +24,6 @@ import org.antlr.v4.parse.GrammarASTAdaptor;
 import org.antlr.v4.parse.GrammarTreeVisitor;
 import org.antlr.v4.parse.ToolANTLRLexer;
 import org.antlr.v4.parse.ToolANTLRParser;
-import org.antlr.v4.parse.v3TreeGrammarException;
 import org.antlr.v4.runtime.RuntimeMetaData;
 import org.antlr.v4.runtime.misc.LogManager;
 import org.antlr.v4.runtime.misc.IntegerList;
@@ -57,12 +56,7 @@ import java.io.OutputStreamWriter;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class Tool {
@@ -119,7 +113,7 @@ public class Tool {
 	public boolean longMessages = false;
 	public boolean exact_output_dir = false;
 
-    public static Option[] optionDefs = {
+    public final static Option[] optionDefs = {
 		new Option("outputDirectory",             "-o", OptionArgType.STRING, "specify output directory where all output is generated"),
 		new Option("libDirectory",                "-lib", OptionArgType.STRING, "specify location of grammars, tokens files"),
 		new Option("generate_ATN_dot",            "-atn", "generate rule augmented transition network diagrams"),
@@ -144,10 +138,6 @@ public class Tool {
 	// helper vars for option management
 	protected boolean haveOutputDir = false;
 	protected boolean return_dont_exit = false;
-
-    // The internal options are for my use on the command line during dev
-    public static boolean internalOption_PrintGrammarTree = false;
-    public static boolean internalOption_ShowATNConfigsInDFA = false;
 
 
 	public final String[] args;
@@ -371,7 +361,6 @@ public class Tool {
 
 	public void processNonCombinedGrammar(Grammar g, boolean gencode) {
 		if ( g.ast==null || g.ast.hasErrors ) return;
-		if ( internalOption_PrintGrammarTree ) System.out.println(g.ast.toStringTree());
 
 		boolean ruleFail = checkForRuleIssues(g);
 		if ( ruleFail ) return;
@@ -381,23 +370,30 @@ public class Tool {
 		SemanticPipeline sem = new SemanticPipeline(g);
 		sem.process();
 
-		String language = g.getOptionString("language");
-		if ( !CodeGenerator.targetExists(language) ) {
-			errMgr.toolError(ErrorType.CANNOT_CREATE_TARGET_GENERATOR, language);
+		if ( errMgr.getNumErrors()>prevErrors ) return;
+
+		CodeGenerator codeGenerator = CodeGenerator.create(g);
+		if (codeGenerator == null) {
 			return;
 		}
 
-		if ( errMgr.getNumErrors()>prevErrors ) return;
-
 		// BUILD ATN FROM AST
 		ATNFactory factory;
-		if ( g.isLexer() ) factory = new LexerATNFactory((LexerGrammar)g);
+		if ( g.isLexer() ) factory = new LexerATNFactory((LexerGrammar)g, codeGenerator);
 		else factory = new ParserATNFactory(g);
 		g.atn = factory.createATN();
 
 		if ( generate_ATN_dot ) generateATNs(g);
 
-		if (gencode && g.tool.getNumErrors()==0 ) generateInterpreterData(g);
+		if (gencode && g.tool.getNumErrors()==0 ) {
+			String interpFile = generateInterpreterData(g);
+			try (Writer fw = getOutputFileWriter(g, g.name + ".interp")) {
+				fw.write(interpFile);
+			}
+			catch (IOException ioe) {
+				errMgr.toolError(ErrorType.CANNOT_WRITE_FILE, ioe);
+			}
+		}
 
 		// PERFORM GRAMMAR ANALYSIS ON ATN: BUILD DECISION DFAs
 		AnalysisPipeline anal = new AnalysisPipeline(g);
@@ -409,7 +405,7 @@ public class Tool {
 
 		// GENERATE CODE
 		if ( gencode ) {
-			CodeGenPipeline gen = new CodeGenPipeline(g);
+			CodeGenPipeline gen = new CodeGenPipeline(g, codeGenerator);
 			gen.process();
 		}
 	}
@@ -657,20 +653,15 @@ public class Tool {
 			lexer.tokens = tokens;
 			ToolANTLRParser p = new ToolANTLRParser(tokens, this);
 			p.setTreeAdaptor(adaptor);
-			try {
-				ParserRuleReturnScope r = p.grammarSpec();
-				GrammarAST root = (GrammarAST)r.getTree();
-				if ( root instanceof GrammarRootAST) {
-					((GrammarRootAST)root).hasErrors = lexer.getNumberOfSyntaxErrors()>0 || p.getNumberOfSyntaxErrors()>0;
-					assert ((GrammarRootAST)root).tokenStream == tokens;
-					if ( grammarOptions!=null ) {
-						((GrammarRootAST)root).cmdLineOptions = grammarOptions;
-					}
-					return ((GrammarRootAST)root);
+			ParserRuleReturnScope r = p.grammarSpec();
+			GrammarAST root = (GrammarAST) r.getTree();
+			if (root instanceof GrammarRootAST) {
+				((GrammarRootAST) root).hasErrors = lexer.getNumberOfSyntaxErrors() > 0 || p.getNumberOfSyntaxErrors() > 0;
+				assert ((GrammarRootAST) root).tokenStream == tokens;
+				if (grammarOptions != null) {
+					((GrammarRootAST) root).cmdLineOptions = grammarOptions;
 				}
-			}
-			catch (v3TreeGrammarException e) {
-				errMgr.grammarError(ErrorType.V3_TREE_GRAMMAR, fileName, e.location);
+				return ((GrammarRootAST) root);
 			}
 			return null;
 		}
@@ -702,7 +693,7 @@ public class Tool {
 		}
 	}
 
-	private void generateInterpreterData(Grammar g) {
+	public static String generateInterpreterData(Grammar g) {
 		StringBuilder content = new StringBuilder();
 
 		content.append("token literal names:\n");
@@ -743,21 +734,14 @@ public class Tool {
 		content.append("\n");
 
 		IntegerList serializedATN = ATNSerializer.getSerialized(g.atn);
+		// Uncomment if you'd like to write out histogram info on the numbers of
+		// each integer value:
+		//Utils.writeSerializedATNIntegerHistogram(g.name+"-histo.csv", serializedATN);
+
 		content.append("atn:\n");
 		content.append(serializedATN.toString());
 
-		try {
-			Writer fw = getOutputFileWriter(g, g.name + ".interp");
-			try {
-				fw.write(content.toString());
-			}
-			finally {
-				fw.close();
-			}
-		}
-		catch (IOException ioe) {
-			errMgr.toolError(ErrorType.CANNOT_WRITE_FILE, ioe);
-		}
+		return content.toString();
 	}
 
 	/** This method is used by all code generators to create new output

@@ -78,6 +78,8 @@ ImportListener(X) ::= ""
 
 GetExpectedTokenNames() ::= "this.expectedTokens.toString(vocabulary: this.vocabulary)"
 
+ImportRuleInvocationStack() ::= ""
+
 RuleInvocationStack() ::= "ruleInvocationStack"
 
 LL_EXACT_AMBIG_DETECTION() ::= <<interpreter!.predictionMode = PredictionMode.LL_EXACT_AMBIG_DETECTION;>>
@@ -242,7 +244,7 @@ TokenGetterListener(X) ::= <<
 class LeafListener extends TBaseListener {
   void exitA(AContext ctx) {
     if (ctx.childCount==2)
-      TEST_platformStdoutWrite("${ctx.INT(0)?.symbol.text} ${ctx.INT(1)?.symbol.text} ${ctx.INTs()}");
+      TEST_platformStdoutWrite("${ctx.INT(0)?.symbol.text} ${ctx.INT(1)?.symbol.text} ${ctx.INTs()}\n");
     else
       print(ctx.ID()?.symbol);
   }
@@ -255,7 +257,7 @@ RuleGetterListener(X) ::= <<
 class LeafListener extends TBaseListener {
   void exitA(AContext ctx) {
     if (ctx.childCount==2) {
-      TEST_platformStdoutWrite("${ctx.b(0)?.start?.text} ${ctx.b(1)?.start?.text} ${ctx.bs()[0].start?.text}");
+      TEST_platformStdoutWrite("${ctx.b(0)?.start?.text} ${ctx.b(1)?.start?.text} ${ctx.bs()[0].start?.text}\n");
     } else
       print(ctx.b(0)?.start?.text);
   }
@@ -281,7 +283,7 @@ LRWithLabelsListener(X) ::= <<
 @parser::definitions {
 class LeafListener extends TBaseListener {
   void exitCall(CallContext ctx) {
-    TEST_platformStdoutWrite("${ctx.e()?.start?.text} ${ctx.eList()}");
+    TEST_platformStdoutWrite("${ctx.e()?.start?.text} ${ctx.eList()}\n");
   }
   void exitInt(IntContext ctx) {
     print(ctx.INT()?.symbol.text);
@@ -314,5 +316,8 @@ Invoke_pred(v) ::= <<this.pred(<v>)>>
 
 ParserTokenType(t) ::= "Parser.<t>"
 ContextRuleFunction(ctx, rule) ::= "<ctx>.<rule>"
+ContextListFunction(ctx, rule) ::= "<ctx>.<rule>()"
 StringType() ::= "String"
-ContextMember(ctx, subctx, member) ::= "<ctx>.<subctx>!.<member>!"
+ContextMember(ctx, member) ::= "<ctx>.<member>!"
+SubContextLocal(ctx, subctx, local) ::= "<ctx>.<subctx>!.<local>!"
+SubContextMember(ctx, subctx, member) ::= "<ctx>.<subctx>!.<member>!"

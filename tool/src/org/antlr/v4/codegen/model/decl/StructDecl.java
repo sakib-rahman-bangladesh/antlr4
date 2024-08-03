@@ -32,6 +32,8 @@ public class StructDecl extends Decl {
 	@ModelElement public List<? super DispatchMethod> dispatchMethods;
 	@ModelElement public List<OutputModelObject> interfaces;
 	@ModelElement public List<OutputModelObject> extensionMembers;
+	// Used to generate method signatures in Go target interfaces
+	@ModelElement public OrderedHashSet<Decl> signatures = new OrderedHashSet<Decl>();
 
 	// Track these separately; Go target needs to generate getters/setters
 	// Do not make them templates; we only need the Decl object not the ST
@@ -44,7 +46,11 @@ public class StructDecl extends Decl {
 	public OrderedHashSet<Decl> attributeDecls = new OrderedHashSet<Decl>();
 
 	public StructDecl(OutputModelFactory factory, Rule r) {
-		super(factory, factory.getGenerator().getTarget().getRuleFunctionContextStructName(r));
+		this(factory, r, null);
+	}
+
+	protected StructDecl(OutputModelFactory factory, Rule r, String name) {
+		super(factory, name == null ? factory.getGenerator().getTarget().getRuleFunctionContextStructName(r) : name);
 		addDispatchMethods(r);
 		derivedFromName = r.name;
 		provideCopyFrom = r.hasAltSpecificContexts();
@@ -67,9 +73,12 @@ public class StructDecl extends Decl {
 	public void addDecl(Decl d) {
 		d.ctx = this;
 
-		if ( d instanceof ContextGetterDecl ) getters.add(d);
-		else attrs.add(d);
-
+		if ( d instanceof ContextGetterDecl ) {
+			getters.add(d);
+			signatures.add(((ContextGetterDecl) d).getSignatureDecl());
+		} else {
+			attrs.add(d);
+		}
 		// add to specific "lists"
 		if ( d instanceof TokenTypeDecl ) {
 			tokenTypeDecls.add(d);

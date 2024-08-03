@@ -13,7 +13,7 @@ import '../../dfa/dfa.dart';
 import '../../error/error.dart';
 import '../../input_stream.dart';
 import '../../interval_set.dart';
-import '../../misc/pair.dart';
+import '../../misc/misc.dart';
 import '../../parser.dart';
 import '../../parser_rule_context.dart';
 import '../../prediction_context.dart';
@@ -260,7 +260,7 @@ class ParserATNSimulator extends ATNSimulator {
     'ANTLR_PARSER_DEBUG',
     defaultValue: false,
   );
-  static const bool debug_list_atn_decisions = bool.fromEnvironment(
+  static const bool trace_atn_sim = bool.fromEnvironment(
     'ANTLR_PARSER_LIST_ATN_DECISIONS_DEBUG',
     defaultValue: false,
   );
@@ -323,7 +323,7 @@ class ParserATNSimulator extends ATNSimulator {
     int decision,
     ParserRuleContext? outerContext,
   ) {
-    if (debug || debug_list_atn_decisions) {
+    if (debug || trace_atn_sim) {
       log('adaptivePredict decision $decision' ' exec LA(1)==' +
           getLookaheadName(input_) +
           ' line ${input_.LT(1)!.line}:${input_.LT(1)!.charPositionInLine}');
@@ -353,7 +353,7 @@ class ParserATNSimulator extends ATNSimulator {
 
       if (s0 == null) {
         outerContext ??= ParserRuleContext.EMPTY;
-        if (debug || debug_list_atn_decisions) {
+        if (debug || trace_atn_sim) {
           log('predictATN decision ${dfa.decision}' ' exec LA(1)==' +
               getLookaheadName(input_) +
               ', outerContext=' +
@@ -430,7 +430,7 @@ class ParserATNSimulator extends ATNSimulator {
   ///
   int execATN(DFA dfa, DFAState s0, TokenStream input, int startIndex,
       ParserRuleContext outerContext) {
-    if (debug || debug_list_atn_decisions) {
+    if (debug || trace_atn_sim) {
       log('execATN decision ${dfa.decision}' ' exec LA(1)==' +
           getLookaheadName(input) +
           ' line ${input.LT(1)!.line}' +
@@ -674,7 +674,7 @@ class ParserATNSimulator extends ATNSimulator {
       TokenStream input,
       int startIndex,
       ParserRuleContext outerContext) {
-    if (debug || debug_list_atn_decisions) {
+    if (debug || trace_atn_sim) {
       log('execATNWithFullContext $s0');
     }
     final fullCtx = true;
@@ -1234,8 +1234,8 @@ class ParserATNSimulator extends ATNSimulator {
     var nPredAlts = 0;
     for (var i = 1; i <= nalts; i++) {
       if (altToPred[i] == null) {
-        altToPred[i] = SemanticContext.NONE;
-      } else if (altToPred[i] != SemanticContext.NONE) {
+        altToPred[i] = EmptySemanticContext.Instance;
+      } else if (altToPred[i] != EmptySemanticContext.Instance) {
         nPredAlts++;
       }
     }
@@ -1264,9 +1264,9 @@ class ParserATNSimulator extends ATNSimulator {
       assert(pred != null);
 
       if (ambigAlts != null && ambigAlts[i]) {
-        pairs.add(PredPrediction(pred, i));
+        pairs.add(PredPrediction(pred!, i));
       }
-      if (pred != SemanticContext.NONE) containsPredicate = true;
+      if (pred != EmptySemanticContext.Instance) containsPredicate = true;
     }
 
     if (!containsPredicate) {
@@ -1370,7 +1370,7 @@ class ParserATNSimulator extends ATNSimulator {
     final succeeded = ATNConfigSet(configs.fullCtx);
     final failed = ATNConfigSet(configs.fullCtx);
     for (var c in configs) {
-      if (c.semanticContext != SemanticContext.NONE) {
+      if (c.semanticContext != EmptySemanticContext.Instance) {
         final predicateEvaluationResult = evalSemanticContextOne(
           c.semanticContext,
           outerContext,
@@ -1390,7 +1390,7 @@ class ParserATNSimulator extends ATNSimulator {
   }
 
   /// Look through a list of predicate/alt pairs, returning alts for the
-  ///  pairs that win. A [NONE] predicate indicates an alt containing an
+  ///  pairs that win. A [Instance] predicate indicates an alt containing an
   ///  unpredicated config which behaves as "always true." If !complete
   ///  then we stop at the first predicate that evaluates to true. This
   ///  includes pairs with null predicates.
@@ -1401,7 +1401,7 @@ class ParserATNSimulator extends ATNSimulator {
   ) {
     final predictions = BitSet();
     for (var pair in predPredictions) {
-      if (pair.pred == SemanticContext.NONE) {
+      if (pair.pred == EmptySemanticContext.Instance) {
         predictions.set(pair.alt);
         if (!complete) {
           break;
@@ -1417,7 +1417,7 @@ class ParserATNSimulator extends ATNSimulator {
       }
 
       if (predicateEvaluationResult) {
-        if (debug || dfa_debug) log('PREDICT ' + pair.alt);
+        if (debug || dfa_debug) log('PREDICT ' + pair.alt.toString());
         predictions.set(pair.alt);
         if (!complete) {
           break;
@@ -1511,7 +1511,7 @@ class ParserATNSimulator extends ATNSimulator {
                   ATNConfig.dup(
                     config,
                     state: config.state,
-                    context: PredictionContext.EMPTY,
+                    context: EmptyPredictionContext.Instance,
                   ),
                   mergeCache);
               continue;
@@ -2431,7 +2431,7 @@ extension PredictionModeExtension on PredictionMode {
 // dup configs, tossing out semantic predicates
         final dup = ATNConfigSet();
         for (var c in configs) {
-          c = ATNConfig.dup(c, semanticContext: SemanticContext.NONE);
+          c = ATNConfig.dup(c, semanticContext: EmptySemanticContext.Instance);
           dup.add(c);
         }
         configs = dup;

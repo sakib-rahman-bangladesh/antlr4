@@ -45,8 +45,6 @@ namespace Antlr4.Runtime.Atn
 
 		readonly SimState prevAccept = new SimState();
 
-		public static int match_calls = 0;
-
 		public LexerATNSimulator(ATN atn, DFA[] decisionToDFA,
 								 PredictionContextCache sharedContextCache)
 			: this(null, atn, decisionToDFA, sharedContextCache)
@@ -74,7 +72,6 @@ namespace Antlr4.Runtime.Atn
 
 		public int Match(ICharStream input, int mode)
 		{
-			match_calls++;
 			this.mode = mode;
 			int mark = input.Mark();
 			try
@@ -386,7 +383,7 @@ namespace Antlr4.Runtime.Atn
 		protected ATNConfigSet ComputeStartState(ICharStream input,
 												 ATNState p)
 		{
-			PredictionContext initialContext = PredictionContext.EMPTY;
+			PredictionContext initialContext = EmptyPredictionContext.Instance;
 			ATNConfigSet configs = new OrderedATNConfigSet();
 			for (int i = 0; i < p.NumberOfTransitions; i++)
 			{
@@ -435,7 +432,7 @@ namespace Antlr4.Runtime.Atn
 						return true;
 					}
 					else {
-						configs.Add(new LexerATNConfig(config, config.state, PredictionContext.EMPTY));
+						configs.Add(new LexerATNConfig(config, config.state, EmptyPredictionContext.Instance));
 						currentAltReachedAcceptState = true;
 					}
 				}
@@ -782,7 +779,7 @@ namespace Antlr4.Runtime.Atn
 		}
 
 
-		public void Consume(ICharStream input)
+		public virtual void Consume(ICharStream input)
 		{
 			int curChar = input.LA(1);
 			if (curChar == '\n')
